@@ -1,0 +1,9 @@
+{
+  "buildCommand": "next build",
+  "devCommand": "next dev",
+  "installCommand": "npm install",
+  "framework": "nextjs",
+  "env": {
+    "NEXT_PUBLIC_CONTRACT_ADDRESS": "0x32aeBD9f29C6Fc81D1E5CA1ba80E4CA34ee20FCB"
+  }
+}

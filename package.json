@@ -32,7 +32,8 @@
     "solidity-coverage": "^0.8.16",
     "ts-node": "^10.9.2",
     "typechain": "^8.3.2",
-    "typescript": "^5.9.3"
+    "typescript": "^5.9.3",
+    "vercel": "^48.3.0"
   },
   "dependencies": {
     "@tanstack/react-query": "^5.90.3",

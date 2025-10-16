@@ -18,17 +18,20 @@ export default function ConnectButton() {
     )
   }
 
+  const handleConnect = () => {
+    const connector = connectors[0]
+    if (connector) {
+      connect({ connector })
+    }
+  }
+
   return (
-    <div style={{ display: 'flex', gap: '0.5rem' }}>
-      {connectors.map((connector) => (
-        <button
-          key={connector.id}
-          className="btn btn-primary"
-          onClick={() => connect({ connector })}
-        >
-          Connect Wallet
-        </button>
-      ))}
-    </div>
+    <button
+      className="btn btn-primary"
+      onClick={handleConnect}
+      disabled={connectors.length === 0}
+    >
+      Connect Wallet
+    </button>
   )
 }
