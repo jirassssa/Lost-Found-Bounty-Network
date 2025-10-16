@@ -1,0 +1,28 @@
+node_modules
+.env
+.env.local
+coverage
+coverage.json
+typechain
+typechain-types
+
+# Hardhat files
+cache
+artifacts
+
+# Next.js
+.next
+out
+
+# macOS
+.DS_Store
+
+# IDE
+.vscode
+.idea
+*.swp
+*.swo
+*~
+
+# Deployment
+deployment-info.json
