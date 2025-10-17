@@ -91,25 +91,20 @@ export default function Home() {
   }, [])
 
   useEffect(() => {
-    if (itemCount) {
-      loadItems()
-    }
-  }, [itemCount])
-
-  useEffect(() => {
     if (publicItemCount > 0) {
+      loadItems()
       loadLeaderboard()
     }
   }, [publicItemCount])
 
   const loadItems = async () => {
-    if (!itemCount) return
+    if (!publicItemCount) return
 
     setLoading(true)
     const loadedItems = []
 
     try {
-      for (let i = 1; i <= Number(itemCount); i++) {
+      for (let i = 1; i <= Number(publicItemCount); i++) {
         try {
           const response = await fetch(`/api/item/${i}`)
           if (response.ok) {
@@ -232,9 +227,14 @@ export default function Home() {
           alert('Transaction submitted! Hash: ' + hash + '\n\nPlease wait for confirmation...')
 
           // รอ 10 วินาทีแล้วรีโหลด
-          setTimeout(() => {
+          setTimeout(async () => {
             console.log('Reloading items...')
-            loadItems()
+            // Refresh public item count first
+            const response = await fetch('/api/itemCount')
+            if (response.ok) {
+              const data = await response.json()
+              setPublicItemCount(data.itemCount)
+            }
             setShowReportModal(false)
             setFormData({
               title: '',
@@ -287,7 +287,13 @@ export default function Home() {
       alert('Claim submitted successfully!')
       setClaimMessage('')
       setShowDetailModal(false)
-      setTimeout(() => loadItems(), 2000)
+      setTimeout(async () => {
+        const response = await fetch('/api/itemCount')
+        if (response.ok) {
+          const data = await response.json()
+          setPublicItemCount(data.itemCount)
+        }
+      }, 2000)
     } catch (error) {
       console.error('Error claiming item:', error)
       alert('Failed to submit claim: ' + (error.message || 'Unknown error'))
@@ -317,7 +323,13 @@ export default function Home() {
 
       alert('Report cancelled! Your bounty will be returned.')
       setShowDetailModal(false)
-      setTimeout(() => loadItems(), 2000)
+      setTimeout(async () => {
+        const response = await fetch('/api/itemCount')
+        if (response.ok) {
+          const data = await response.json()
+          setPublicItemCount(data.itemCount)
+        }
+      }, 2000)
     } catch (error) {
       console.error('Error cancelling report:', error)
       alert('Failed to cancel report: ' + (error.message || 'Unknown error'))
@@ -350,7 +362,13 @@ export default function Home() {
       alert('Bounty increased successfully!')
       setShowIncreaseBountyModal(false)
       setIncreaseBountyAmount('')
-      setTimeout(() => loadItems(), 2000)
+      setTimeout(async () => {
+        const response = await fetch('/api/itemCount')
+        if (response.ok) {
+          const data = await response.json()
+          setPublicItemCount(data.itemCount)
+        }
+      }, 2000)
     } catch (error) {
       console.error('Error increasing bounty:', error)
       alert('Failed to increase bounty: ' + (error.message || 'Unknown error'))
@@ -787,7 +805,13 @@ export default function Home() {
                                   })
                                   alert('Finder confirmed!')
                                   setShowDetailModal(false)
-                                  setTimeout(() => loadItems(), 2000)
+                                  setTimeout(async () => {
+                                    const response = await fetch('/api/itemCount')
+                                    if (response.ok) {
+                                      const data = await response.json()
+                                      setPublicItemCount(data.itemCount)
+                                    }
+                                  }, 2000)
                                 } catch (error) {
                                   alert('Failed to confirm finder')
                                 }
