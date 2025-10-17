@@ -91,6 +91,7 @@ export default function Home() {
       const loadedItems = data.items || []
 
       // Set items (reversed to show newest first)
+      console.log('Loaded items:', loadedItems.length, 'Total count:', data.itemCount)
       setItems(loadedItems.reverse())
       setPublicItemCount(data.itemCount)
 
