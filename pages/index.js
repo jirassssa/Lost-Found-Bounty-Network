@@ -31,6 +31,9 @@ export default function Home() {
 
   const [claimMessage, setClaimMessage] = useState('')
   const [txHash, setTxHash] = useState(null)
+  const [showIncreaseBountyModal, setShowIncreaseBountyModal] = useState(false)
+  const [increaseBountyAmount, setIncreaseBountyAmount] = useState('')
+  const [selectedItemForBounty, setSelectedItemForBounty] = useState(null)
 
   const { writeContract, isPending: isWritePending, data: writeData } = useWriteContract()
   const { switchChain } = useSwitchChain()
@@ -213,6 +216,74 @@ export default function Home() {
     } finally {
       setLoading(false)
     }
+  }
+
+  const handleCancelReport = async (itemId) => {
+    if (!canInteract) {
+      alert('Please connect to Base Mainnet first')
+      return
+    }
+
+    if (!confirm('Are you sure you want to cancel this report? You will get your bounty back.')) {
+      return
+    }
+
+    try {
+      setLoading(true)
+      await writeContract({
+        address: CONTRACT_ADDRESS,
+        abi: CONTRACT_ABI,
+        functionName: 'cancelItemReport',
+        args: [itemId]
+      })
+
+      alert('Report cancelled! Your bounty will be returned.')
+      setShowDetailModal(false)
+      setTimeout(() => loadItems(), 2000)
+    } catch (error) {
+      console.error('Error cancelling report:', error)
+      alert('Failed to cancel report: ' + (error.message || 'Unknown error'))
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const handleIncreaseBounty = async () => {
+    if (!canInteract) {
+      alert('Please connect to Base Mainnet first')
+      return
+    }
+
+    if (!increaseBountyAmount || parseFloat(increaseBountyAmount) < 0.0001) {
+      alert('Increase amount must be at least 0.0001 ETH')
+      return
+    }
+
+    try {
+      setLoading(true)
+      await writeContract({
+        address: CONTRACT_ADDRESS,
+        abi: CONTRACT_ABI,
+        functionName: 'increaseBounty',
+        args: [selectedItemForBounty],
+        value: parseEther(increaseBountyAmount)
+      })
+
+      alert('Bounty increased successfully!')
+      setShowIncreaseBountyModal(false)
+      setIncreaseBountyAmount('')
+      setTimeout(() => loadItems(), 2000)
+    } catch (error) {
+      console.error('Error increasing bounty:', error)
+      alert('Failed to increase bounty: ' + (error.message || 'Unknown error'))
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const openIncreaseBountyModal = (itemId) => {
+    setSelectedItemForBounty(itemId)
+    setShowIncreaseBountyModal(true)
   }
 
   const filterItems = () => {
@@ -514,6 +585,28 @@ export default function Home() {
                    selectedItem.isClaimed ? 'Claimed' : 'Active'}
                 </span></p>
 
+                {/* Owner Actions */}
+                {canInteract && !selectedItem.isResolved && selectedItem.owner?.toLowerCase() === address?.toLowerCase() && (
+                  <div style={{marginTop: '1.5rem', display: 'flex', gap: '1rem', flexWrap: 'wrap'}}>
+                    <button
+                      className="btn btn-secondary"
+                      onClick={() => openIncreaseBountyModal(selectedItem.id)}
+                      disabled={loading}
+                      style={{flex: 1}}
+                    >
+                      💰 Increase Bounty
+                    </button>
+                    <button
+                      className="btn btn-danger"
+                      onClick={() => handleCancelReport(selectedItem.id)}
+                      disabled={loading}
+                      style={{flex: 1}}
+                    >
+                      {loading ? 'Processing...' : '❌ Cancel Report'}
+                    </button>
+                  </div>
+                )}
+
                 {canInteract && !selectedItem.isResolved && selectedItem.owner?.toLowerCase() !== address?.toLowerCase() && (
                   <div style={{marginTop: '1.5rem'}}>
                     <label className="form-label">Claim this item</label>
@@ -573,6 +666,59 @@ export default function Home() {
                     </ul>
                   </div>
                 )}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Increase Bounty Modal */}
+        {showIncreaseBountyModal && (
+          <div className="modal-overlay" onClick={() => setShowIncreaseBountyModal(false)}>
+            <div className="modal" onClick={(e) => e.stopPropagation()} style={{maxWidth: '400px'}}>
+              <div className="modal-header">
+                <h2 className="modal-title">💰 Increase Bounty</h2>
+                <button className="modal-close" onClick={() => setShowIncreaseBountyModal(false)}>
+                  ×
+                </button>
+              </div>
+              <div className="modal-body">
+                <p style={{color: 'var(--gray)', marginBottom: '1.5rem'}}>
+                  Add more ETH to the bounty to attract more finders. This cannot be refunded if someone claims the item.
+                </p>
+                <div className="form-group">
+                  <label className="form-label">Additional Amount (ETH)</label>
+                  <input
+                    type="number"
+                    step="0.0001"
+                    min="0.0001"
+                    className="form-input"
+                    placeholder="0.0001"
+                    value={increaseBountyAmount}
+                    onChange={(e) => setIncreaseBountyAmount(e.target.value)}
+                    required
+                  />
+                  <small style={{color: 'var(--gray)', marginTop: '0.5rem', display: 'block'}}>
+                    Minimum: 0.0001 ETH
+                  </small>
+                </div>
+                <div style={{display: 'flex', gap: '1rem'}}>
+                  <button
+                    className="btn btn-outline"
+                    onClick={() => setShowIncreaseBountyModal(false)}
+                    disabled={loading}
+                    style={{flex: 1}}
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    className="btn btn-secondary"
+                    onClick={handleIncreaseBounty}
+                    disabled={loading}
+                    style={{flex: 1}}
+                  >
+                    {loading ? 'Processing...' : 'Increase Bounty'}
+                  </button>
+                </div>
               </div>
             </div>
           </div>
