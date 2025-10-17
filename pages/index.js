@@ -34,6 +34,8 @@ export default function Home() {
   const [showIncreaseBountyModal, setShowIncreaseBountyModal] = useState(false)
   const [increaseBountyAmount, setIncreaseBountyAmount] = useState('')
   const [selectedItemForBounty, setSelectedItemForBounty] = useState(null)
+  const [leaderboard, setLeaderboard] = useState([])
+  const [loadingLeaderboard, setLoadingLeaderboard] = useState(false)
 
   const { writeContract, isPending: isWritePending, data: writeData } = useWriteContract()
   const { switchChain } = useSwitchChain()
@@ -73,6 +75,7 @@ export default function Home() {
 
   useEffect(() => {
     loadItems()
+    loadLeaderboard()
   }, [itemCount])
 
   const loadItems = async () => {
@@ -99,6 +102,57 @@ export default function Home() {
       console.error('Error loading items:', error)
     } finally {
       setLoading(false)
+    }
+  }
+
+  const loadLeaderboard = async () => {
+    if (!itemCount) return
+
+    setLoadingLeaderboard(true)
+    const finderStats = {}
+
+    try {
+      // Load all items and collect finder statistics
+      for (let i = 1; i <= Number(itemCount); i++) {
+        try {
+          const response = await fetch(`/api/item/${i}`)
+          if (response.ok) {
+            const item = await response.json()
+
+            // Only count resolved items with confirmed finders
+            if (item.isResolved && item.finder && item.finder !== '0x0000000000000000000000000000000000000000') {
+              if (!finderStats[item.finder]) {
+                finderStats[item.finder] = {
+                  address: item.finder,
+                  itemsFound: 0,
+                  totalEarned: BigInt(0)
+                }
+              }
+              finderStats[item.finder].itemsFound++
+              // Calculate finder reward (bounty - 2% platform fee)
+              const bounty = BigInt(item.bountyAmount)
+              const finderReward = bounty - (bounty * BigInt(2) / BigInt(100))
+              finderStats[item.finder].totalEarned += finderReward
+            }
+          }
+        } catch (err) {
+          console.error(`Error loading item ${i} for leaderboard:`, err)
+        }
+      }
+
+      // Convert to array and sort by total earned
+      const leaderboardArray = Object.values(finderStats)
+        .sort((a, b) => {
+          const diff = b.totalEarned - a.totalEarned
+          return diff > 0 ? 1 : diff < 0 ? -1 : 0
+        })
+        .slice(0, 10) // Top 10
+
+      setLeaderboard(leaderboardArray)
+    } catch (error) {
+      console.error('Error loading leaderboard:', error)
+    } finally {
+      setLoadingLeaderboard(false)
     }
   }
 
@@ -378,6 +432,12 @@ export default function Home() {
             Browse Lost Items
           </button>
           <button
+            className={`tab ${activeTab === 'leaderboard' ? 'active' : ''}`}
+            onClick={() => setActiveTab('leaderboard')}
+          >
+            🏆 Leaderboard
+          </button>
+          <button
             className={`tab ${activeTab === 'my-reports' ? 'active' : ''}`}
             onClick={() => setActiveTab('my-reports')}
             disabled={!isConnected}
@@ -408,49 +468,100 @@ export default function Home() {
           )}
         </div>
 
-        {loading && <div className="loading">Loading...</div>}
-
-        {!loading && (
-          <div className="item-grid">
-            {filterItems().length === 0 ? (
-              <div className="empty-state">
-                <div className="empty-state-icon">📭</div>
-                <div className="empty-state-text">No items found</div>
-              </div>
+        {activeTab === 'leaderboard' ? (
+          <div>
+            {loadingLeaderboard ? (
+              <div className="loading">Loading leaderboard...</div>
             ) : (
-              filterItems().map(item => (
-                <div
-                  key={item.id}
-                  className="item-card"
-                  onClick={() => openItemDetail(item)}
-                >
-                  {item.imageUrl && (
-                    <img src={item.imageUrl} alt={item.title} className="item-image" />
-                  )}
-                  <div className="item-content">
-                    <div className="item-header">
-                      <h3 className="item-title">{item.title}</h3>
-                      <div className="bounty-badge">
-                        {formatEther(item.bountyAmount)} ETH
-                      </div>
-                    </div>
-                    <p className="item-description">{item.description}</p>
-                    <div className="item-meta">
-                      <span>📍 {item.location}</span>
-                      <span>🏷️ {item.category}</span>
-                      <span className={`status-badge ${
-                        item.isResolved ? 'status-resolved' :
-                        item.isClaimed ? 'status-claimed' : 'status-active'
-                      }`}>
-                        {item.isResolved ? 'Resolved' :
-                         item.isClaimed ? 'Claimed' : 'Active'}
-                      </span>
-                    </div>
+              <div className="leaderboard-container">
+                <h2 className="leaderboard-title">🏆 Top Finders</h2>
+                <p className="leaderboard-subtitle">Users who have successfully found and returned lost items</p>
+
+                {leaderboard.length === 0 ? (
+                  <div className="empty-state">
+                    <div className="empty-state-icon">🏆</div>
+                    <div className="empty-state-text">No finders yet. Be the first to help someone!</div>
                   </div>
-                </div>
-              ))
+                ) : (
+                  <div className="leaderboard-list">
+                    {leaderboard.map((finder, index) => (
+                      <div key={finder.address} className="leaderboard-item">
+                        <div className="leaderboard-rank">
+                          {index === 0 && '🥇'}
+                          {index === 1 && '🥈'}
+                          {index === 2 && '🥉'}
+                          {index > 2 && `#${index + 1}`}
+                        </div>
+                        <div className="leaderboard-info">
+                          <div className="leaderboard-address">
+                            {finder.address.slice(0, 6)}...{finder.address.slice(-4)}
+                          </div>
+                          <div className="leaderboard-stats">
+                            <span className="stat-pill">
+                              📦 {finder.itemsFound} {finder.itemsFound === 1 ? 'item' : 'items'} found
+                            </span>
+                          </div>
+                        </div>
+                        <div className="leaderboard-earnings">
+                          <div className="earnings-amount">
+                            {formatEther(finder.totalEarned)} ETH
+                          </div>
+                          <div className="earnings-label">Total Earned</div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
             )}
           </div>
+        ) : (
+          <>
+            {loading && <div className="loading">Loading...</div>}
+
+            {!loading && (
+              <div className="item-grid">
+                {filterItems().length === 0 ? (
+                  <div className="empty-state">
+                    <div className="empty-state-icon">📭</div>
+                    <div className="empty-state-text">No items found</div>
+                  </div>
+                ) : (
+                  filterItems().map(item => (
+                    <div
+                      key={item.id}
+                      className="item-card"
+                      onClick={() => openItemDetail(item)}
+                    >
+                      {item.imageUrl && (
+                        <img src={item.imageUrl} alt={item.title} className="item-image" />
+                      )}
+                      <div className="item-content">
+                        <div className="item-header">
+                          <h3 className="item-title">{item.title}</h3>
+                          <div className="bounty-badge">
+                            {formatEther(item.bountyAmount)} ETH
+                          </div>
+                        </div>
+                        <p className="item-description">{item.description}</p>
+                        <div className="item-meta">
+                          <span>📍 {item.location}</span>
+                          <span>🏷️ {item.category}</span>
+                          <span className={`status-badge ${
+                            item.isResolved ? 'status-resolved' :
+                            item.isClaimed ? 'status-claimed' : 'status-active'
+                          }`}>
+                            {item.isResolved ? 'Resolved' :
+                             item.isClaimed ? 'Claimed' : 'Active'}
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+                  ))
+                )}
+              </div>
+            )}
+          </>
         )}
 
         {/* Report Item Modal */}
