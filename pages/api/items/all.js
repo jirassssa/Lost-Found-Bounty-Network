@@ -2,11 +2,22 @@ import { ethers } from 'ethers'
 import CONTRACT_ABI from '../../../src/config/abi.json'
 
 const CONTRACT_ADDRESS = process.env.NEXT_PUBLIC_CONTRACT_ADDRESS || '0x0000000000000000000000000000000000000000'
-const RPC_URL = 'https://mainnet.base.org'
+// Try multiple RPC providers for better reliability
+const RPC_URLS = [
+  'https://mainnet.base.org',
+  'https://base.llamarpc.com',
+  'https://base-mainnet.public.blastapi.io'
+]
+
+function getProvider() {
+  // Rotate through providers
+  const randomIndex = Math.floor(Math.random() * RPC_URLS.length)
+  return new ethers.JsonRpcProvider(RPC_URLS[randomIndex])
+}
 
 export default async function handler(req, res) {
   try {
-    const provider = new ethers.JsonRpcProvider(RPC_URL)
+    const provider = getProvider()
     const contract = new ethers.Contract(CONTRACT_ADDRESS, CONTRACT_ABI, provider)
 
     const itemCount = await contract.itemCounter()

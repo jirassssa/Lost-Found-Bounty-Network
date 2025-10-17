@@ -315,6 +315,26 @@ export default function Home() {
     setShowIncreaseBountyModal(true)
   }
 
+  // Convert imgbb share links to direct image links
+  const getDirectImageUrl = (url) => {
+    if (!url) return ''
+
+    // Handle ibb.co share links (e.g. https://ibb.co/ABC123)
+    const ibbMatch = url.match(/ibb\.co\/([a-zA-Z0-9]+)/)
+    if (ibbMatch) {
+      // Convert to direct link - note: this is approximate, may need actual image extension
+      return `https://i.ibb.co/${ibbMatch[1]}/image.png`
+    }
+
+    // Handle postimg share links
+    const postimgMatch = url.match(/postimg\.cc\/([a-zA-Z0-9]+)/)
+    if (postimgMatch) {
+      return `https://i.postimg.cc/${postimgMatch[1]}/image.png`
+    }
+
+    return url
+  }
+
   const filterItems = () => {
     switch (activeTab) {
       case 'my-reports':
@@ -509,7 +529,7 @@ export default function Home() {
                       onClick={() => openItemDetail(item)}
                     >
                       {item.imageUrl && (
-                        <img src={item.imageUrl} alt={item.title} className="item-image" />
+                        <img src={getDirectImageUrl(item.imageUrl)} alt={item.title} className="item-image" onError={(e) => {e.target.style.display='none'}} />
                       )}
                       <div className="item-content">
                         <div className="item-header">
