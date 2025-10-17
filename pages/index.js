@@ -74,90 +74,45 @@ export default function Home() {
     }
   }, [profileData])
 
-  // Load public item count for everyone (no wallet required)
+  // Load all items for everyone (no wallet required)
   useEffect(() => {
-    const fetchPublicItemCount = async () => {
-      try {
-        const response = await fetch('/api/itemCount')
-        if (response.ok) {
-          const data = await response.json()
-          setPublicItemCount(data.itemCount)
-        }
-      } catch (error) {
-        console.error('Error fetching public item count:', error)
-      }
-    }
-    fetchPublicItemCount()
+    loadAllData()
   }, [])
 
-  useEffect(() => {
-    if (publicItemCount > 0) {
-      loadItems()
-      loadLeaderboard()
-    }
-  }, [publicItemCount])
-
-  const loadItems = async () => {
-    if (!publicItemCount) return
-
+  const loadAllData = async () => {
     setLoading(true)
-    const loadedItems = []
-
-    try {
-      for (let i = 1; i <= Number(publicItemCount); i++) {
-        try {
-          const response = await fetch(`/api/item/${i}`)
-          if (response.ok) {
-            const item = await response.json()
-            loadedItems.push(item)
-          }
-        } catch (err) {
-          console.error(`Error loading item ${i}:`, err)
-        }
-      }
-
-      setItems(loadedItems.reverse())
-    } catch (error) {
-      console.error('Error loading items:', error)
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  const loadLeaderboard = async () => {
-    if (!publicItemCount) return
-
     setLoadingLeaderboard(true)
-    const finderStats = {}
 
     try {
-      // Load all items and collect finder statistics
-      for (let i = 1; i <= Number(publicItemCount); i++) {
-        try {
-          const response = await fetch(`/api/item/${i}`)
-          if (response.ok) {
-            const item = await response.json()
+      const response = await fetch('/api/items/all')
+      if (!response.ok) throw new Error('Failed to load items')
 
-            // Only count resolved items with confirmed finders
-            if (item.isResolved && item.finder && item.finder !== '0x0000000000000000000000000000000000000000') {
-              if (!finderStats[item.finder]) {
-                finderStats[item.finder] = {
-                  address: item.finder,
-                  itemsFound: 0,
-                  totalEarned: BigInt(0)
-                }
-              }
-              finderStats[item.finder].itemsFound++
-              // Calculate finder reward (bounty - 2% platform fee)
-              const bounty = BigInt(item.bountyAmount)
-              const finderReward = bounty - (bounty * BigInt(2) / BigInt(100))
-              finderStats[item.finder].totalEarned += finderReward
+      const data = await response.json()
+      const loadedItems = data.items || []
+
+      // Set items (reversed to show newest first)
+      setItems(loadedItems.reverse())
+      setPublicItemCount(data.itemCount)
+
+      // Calculate leaderboard from loaded items
+      const finderStats = {}
+      loadedItems.forEach(item => {
+        // Only count resolved items with confirmed finders
+        if (item.isResolved && item.finder && item.finder !== '0x0000000000000000000000000000000000000000') {
+          if (!finderStats[item.finder]) {
+            finderStats[item.finder] = {
+              address: item.finder,
+              itemsFound: 0,
+              totalEarned: BigInt(0)
             }
           }
-        } catch (err) {
-          console.error(`Error loading item ${i} for leaderboard:`, err)
+          finderStats[item.finder].itemsFound++
+          // Calculate finder reward (bounty - 2% platform fee)
+          const bounty = BigInt(item.bountyAmount)
+          const finderReward = bounty - (bounty * BigInt(2) / BigInt(100))
+          finderStats[item.finder].totalEarned += finderReward
         }
-      }
+      })
 
       // Convert to array and sort by total earned
       const leaderboardArray = Object.values(finderStats)
@@ -169,8 +124,9 @@ export default function Home() {
 
       setLeaderboard(leaderboardArray)
     } catch (error) {
-      console.error('Error loading leaderboard:', error)
+      console.error('Error loading data:', error)
     } finally {
+      setLoading(false)
       setLoadingLeaderboard(false)
     }
   }
@@ -227,14 +183,9 @@ export default function Home() {
           alert('Transaction submitted! Hash: ' + hash + '\n\nPlease wait for confirmation...')
 
           // รอ 10 วินาทีแล้วรีโหลด
-          setTimeout(async () => {
+          setTimeout(() => {
             console.log('Reloading items...')
-            // Refresh public item count first
-            const response = await fetch('/api/itemCount')
-            if (response.ok) {
-              const data = await response.json()
-              setPublicItemCount(data.itemCount)
-            }
+            loadAllData()
             setShowReportModal(false)
             setFormData({
               title: '',
@@ -244,7 +195,6 @@ export default function Home() {
               category: '',
               bountyAmount: ''
             })
-            setLoading(false)
             alert('Item reported successfully!')
           }, 10000)
         },
@@ -287,13 +237,7 @@ export default function Home() {
       alert('Claim submitted successfully!')
       setClaimMessage('')
       setShowDetailModal(false)
-      setTimeout(async () => {
-        const response = await fetch('/api/itemCount')
-        if (response.ok) {
-          const data = await response.json()
-          setPublicItemCount(data.itemCount)
-        }
-      }, 2000)
+      setTimeout(() => loadAllData(), 2000)
     } catch (error) {
       console.error('Error claiming item:', error)
       alert('Failed to submit claim: ' + (error.message || 'Unknown error'))
@@ -323,13 +267,7 @@ export default function Home() {
 
       alert('Report cancelled! Your bounty will be returned.')
       setShowDetailModal(false)
-      setTimeout(async () => {
-        const response = await fetch('/api/itemCount')
-        if (response.ok) {
-          const data = await response.json()
-          setPublicItemCount(data.itemCount)
-        }
-      }, 2000)
+      setTimeout(() => loadAllData(), 2000)
     } catch (error) {
       console.error('Error cancelling report:', error)
       alert('Failed to cancel report: ' + (error.message || 'Unknown error'))
@@ -362,13 +300,7 @@ export default function Home() {
       alert('Bounty increased successfully!')
       setShowIncreaseBountyModal(false)
       setIncreaseBountyAmount('')
-      setTimeout(async () => {
-        const response = await fetch('/api/itemCount')
-        if (response.ok) {
-          const data = await response.json()
-          setPublicItemCount(data.itemCount)
-        }
-      }, 2000)
+      setTimeout(() => loadAllData(), 2000)
     } catch (error) {
       console.error('Error increasing bounty:', error)
       alert('Failed to increase bounty: ' + (error.message || 'Unknown error'))
@@ -805,13 +737,7 @@ export default function Home() {
                                   })
                                   alert('Finder confirmed!')
                                   setShowDetailModal(false)
-                                  setTimeout(async () => {
-                                    const response = await fetch('/api/itemCount')
-                                    if (response.ok) {
-                                      const data = await response.json()
-                                      setPublicItemCount(data.itemCount)
-                                    }
-                                  }, 2000)
+                                  setTimeout(() => loadAllData(), 2000)
                                 } catch (error) {
                                   alert('Failed to confirm finder')
                                 }
