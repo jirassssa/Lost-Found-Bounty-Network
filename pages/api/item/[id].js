@@ -1,13 +1,8 @@
 import { ethers } from 'ethers'
+import CONTRACT_ABI from '../../../src/config/abi.json'
 
 const CONTRACT_ADDRESS = process.env.NEXT_PUBLIC_CONTRACT_ADDRESS || '0x0000000000000000000000000000000000000000'
 const RPC_URL = 'https://mainnet.base.org'
-
-const CONTRACT_ABI = [
-  "function items(uint256) external view returns (uint256,address,string,string,string,uint256,address,bool,bool,uint256,string,string)",
-  "function getClaimants(uint256) external view returns (address[])",
-  "function getClaimMessage(uint256,address) external view returns (string)"
-]
 
 export default async function handler(req, res) {
   const { id } = req.query

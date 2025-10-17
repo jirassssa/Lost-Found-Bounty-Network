@@ -1,29 +1,16 @@
 import { useState, useEffect } from 'react'
-import { useAccount, useWriteContract, useReadContract } from 'wagmi'
+import { useAccount, useWriteContract, useReadContract, useWaitForTransactionReceipt, useSwitchChain } from 'wagmi'
 import { parseEther, formatEther } from 'viem'
+import { base } from 'wagmi/chains'
 import ConnectButton from '../src/components/ConnectButton'
+import CONTRACT_ABI from '../src/config/abi.json'
 
 // Contract configuration - update after deployment
 const CONTRACT_ADDRESS = process.env.NEXT_PUBLIC_CONTRACT_ADDRESS || '0x0000000000000000000000000000000000000000'
-
-const CONTRACT_ABI = [
-  "function reportLostItem(string,string,string,string,string) external payable returns (uint256)",
-  "function claimItem(uint256,string) external",
-  "function confirmFinder(uint256,address) external",
-  "function cancelItemReport(uint256) external",
-  "function increaseBounty(uint256) external payable",
-  "function items(uint256) external view returns (uint256,address,string,string,string,uint256,address,bool,bool,uint256,string,string)",
-  "function itemCounter() external view returns (uint256)",
-  "function getClaimants(uint256) external view returns (address[])",
-  "function getClaimMessage(uint256,address) external view returns (string)",
-  "function getUserProfile(address) external view returns (uint256,uint256,uint256,int256,bool)",
-  "event ItemReported(uint256 indexed,address indexed,string,uint256,uint256)",
-  "event ItemClaimed(uint256 indexed,address indexed,string,uint256)",
-  "event ItemResolved(uint256 indexed,address indexed,uint256,uint256)"
-]
+const REQUIRED_CHAIN_ID = base.id // 8453
 
 export default function Home() {
-  const { address, isConnected } = useAccount()
+  const { address, isConnected, chain } = useAccount()
   const [activeTab, setActiveTab] = useState('browse')
   const [items, setItems] = useState([])
   const [loading, setLoading] = useState(false)
@@ -43,8 +30,18 @@ export default function Home() {
   })
 
   const [claimMessage, setClaimMessage] = useState('')
+  const [txHash, setTxHash] = useState(null)
 
-  const { writeContract } = useWriteContract()
+  const { writeContract, isPending: isWritePending, data: writeData } = useWriteContract()
+  const { switchChain } = useSwitchChain()
+
+  const { isLoading: isTxLoading, isSuccess: isTxSuccess } = useWaitForTransactionReceipt({
+    hash: txHash,
+  })
+
+  // Check if on correct network
+  const isCorrectNetwork = chain?.id === REQUIRED_CHAIN_ID
+  const canInteract = isConnected && isCorrectNetwork
 
   const { data: itemCount } = useReadContract({
     address: CONTRACT_ADDRESS,
@@ -109,37 +106,79 @@ export default function Home() {
       return
     }
 
+    // ตรวจสอบ network ก่อนทำ transaction
+    if (!isCorrectNetwork) {
+      alert('Wrong network! Please switch to Base Mainnet.\n\nClick the "Switch to Base" button.')
+      if (switchChain) {
+        try {
+          await switchChain({ chainId: REQUIRED_CHAIN_ID })
+        } catch (error) {
+          console.error('Failed to switch network:', error)
+        }
+      }
+      return
+    }
+
+    if (!formData.bountyAmount || parseFloat(formData.bountyAmount) < 0.0001) {
+      alert('Bounty amount must be at least 0.0001 ETH')
+      return
+    }
+
     try {
       setLoading(true)
-      await writeContract({
+      console.log('Submitting transaction with data:', {
+        title: formData.title,
+        bountyAmount: formData.bountyAmount,
+        contract: CONTRACT_ADDRESS
+      })
+
+      const result = writeContract({
         address: CONTRACT_ADDRESS,
         abi: CONTRACT_ABI,
         functionName: 'reportLostItem',
         args: [
           formData.title,
           formData.description,
-          formData.imageUrl,
+          formData.imageUrl || '',
           formData.location,
           formData.category
         ],
         value: parseEther(formData.bountyAmount)
+      }, {
+        onSuccess: (hash) => {
+          console.log('Transaction hash:', hash)
+          setTxHash(hash)
+          alert('Transaction submitted! Hash: ' + hash + '\n\nPlease wait for confirmation...')
+
+          // รอ 10 วินาทีแล้วรีโหลด
+          setTimeout(() => {
+            console.log('Reloading items...')
+            loadItems()
+            setShowReportModal(false)
+            setFormData({
+              title: '',
+              description: '',
+              imageUrl: '',
+              location: '',
+              category: '',
+              bountyAmount: ''
+            })
+            setLoading(false)
+            alert('Item reported successfully!')
+          }, 10000)
+        },
+        onError: (error) => {
+          console.error('Transaction error:', error)
+          alert('Transaction failed!\n\nError: ' + (error.shortMessage || error.message || 'Transaction rejected'))
+          setLoading(false)
+        }
       })
 
-      alert('Item reported successfully!')
-      setShowReportModal(false)
-      setFormData({
-        title: '',
-        description: '',
-        imageUrl: '',
-        location: '',
-        category: '',
-        bountyAmount: ''
-      })
-      setTimeout(() => loadItems(), 2000)
+      console.log('Write contract result:', result)
+
     } catch (error) {
       console.error('Error reporting item:', error)
-      alert('Failed to report item: ' + (error.message || 'Unknown error'))
-    } finally {
+      alert('Failed to report item!\n\nError: ' + (error.shortMessage || error.message || 'Unknown error'))
       setLoading(false)
     }
   }
@@ -218,6 +257,27 @@ export default function Home() {
       </header>
 
       <main className="main-content container">
+        {/* Network Warning Banner */}
+        {isConnected && !isCorrectNetwork && (
+          <div className="network-warning">
+            <div className="network-warning-content">
+              <div className="network-warning-icon">⚠️</div>
+              <div className="network-warning-text">
+                <strong>Wrong Network Detected!</strong>
+                <br />
+                You are currently on {chain?.name || 'Unknown Network'}. Please switch to Base Mainnet to use this application.
+              </div>
+              <button
+                className="btn btn-danger"
+                onClick={() => switchChain({ chainId: REQUIRED_CHAIN_ID })}
+                style={{ marginLeft: 'auto', whiteSpace: 'nowrap' }}
+              >
+                Switch to Base
+              </button>
+            </div>
+          </div>
+        )}
+
         {isConnected && userProfile && (
           <div className="stats-grid">
             <div className="stat-card">
@@ -266,7 +326,7 @@ export default function Home() {
           >
             Resolved
           </button>
-          {isConnected && (
+          {canInteract && (
             <button
               className="btn btn-primary"
               onClick={() => setShowReportModal(true)}
@@ -358,9 +418,22 @@ export default function Home() {
                     <input
                       type="url"
                       className="form-input"
+                      placeholder="https://i.imgur.com/example.jpg"
                       value={formData.imageUrl}
                       onChange={(e) => setFormData({...formData, imageUrl: e.target.value})}
                     />
+                    <small style={{color: 'var(--gray)', marginTop: '0.5rem', display: 'block'}}>
+                      📸 Upload image for free:
+                      <a href="https://imgur.com/upload" target="_blank" rel="noopener noreferrer" style={{color: 'var(--primary)', marginLeft: '0.5rem', textDecoration: 'underline'}}>
+                        Imgur
+                      </a> |
+                      <a href="https://imgbb.com" target="_blank" rel="noopener noreferrer" style={{color: 'var(--primary)', marginLeft: '0.5rem', textDecoration: 'underline'}}>
+                        ImgBB
+                      </a> |
+                      <a href="https://postimages.org" target="_blank" rel="noopener noreferrer" style={{color: 'var(--primary)', marginLeft: '0.5rem', textDecoration: 'underline'}}>
+                        PostImages
+                      </a>
+                    </small>
                   </div>
                   <div className="form-group">
                     <label className="form-label">Location</label>
@@ -394,13 +467,17 @@ export default function Home() {
                     <label className="form-label">Bounty Amount (ETH)</label>
                     <input
                       type="number"
-                      step="0.001"
-                      min="0.001"
+                      step="0.0001"
+                      min="0.0001"
                       className="form-input"
+                      placeholder="0.0001"
                       value={formData.bountyAmount}
                       onChange={(e) => setFormData({...formData, bountyAmount: e.target.value})}
                       required
                     />
+                    <small style={{color: 'var(--gray)', marginTop: '0.5rem', display: 'block'}}>
+                      Minimum: 0.0001 ETH
+                    </small>
                   </div>
                   <button type="submit" className="btn btn-primary" disabled={loading} style={{width: '100%'}}>
                     {loading ? 'Submitting...' : 'Report Item'}
@@ -437,7 +514,7 @@ export default function Home() {
                    selectedItem.isClaimed ? 'Claimed' : 'Active'}
                 </span></p>
 
-                {isConnected && !selectedItem.isResolved && selectedItem.owner?.toLowerCase() !== address?.toLowerCase() && (
+                {canInteract && !selectedItem.isResolved && selectedItem.owner?.toLowerCase() !== address?.toLowerCase() && (
                   <div style={{marginTop: '1.5rem'}}>
                     <label className="form-label">Claim this item</label>
                     <textarea
@@ -469,7 +546,7 @@ export default function Home() {
                               {selectedItem.claimMessages?.[claimer] || 'No message'}
                             </div>
                           </div>
-                          {isConnected && selectedItem.owner?.toLowerCase() === address?.toLowerCase() && !selectedItem.isResolved && (
+                          {canInteract && selectedItem.owner?.toLowerCase() === address?.toLowerCase() && !selectedItem.isResolved && (
                             <button
                               className="btn btn-primary"
                               onClick={async () => {
