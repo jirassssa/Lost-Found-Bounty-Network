@@ -36,6 +36,7 @@ export default function Home() {
   const [selectedItemForBounty, setSelectedItemForBounty] = useState(null)
   const [leaderboard, setLeaderboard] = useState([])
   const [loadingLeaderboard, setLoadingLeaderboard] = useState(false)
+  const [publicItemCount, setPublicItemCount] = useState(0)
 
   const { writeContract, isPending: isWritePending, data: writeData } = useWriteContract()
   const { switchChain } = useSwitchChain()
@@ -73,10 +74,33 @@ export default function Home() {
     }
   }, [profileData])
 
+  // Load public item count for everyone (no wallet required)
   useEffect(() => {
-    loadItems()
-    loadLeaderboard()
+    const fetchPublicItemCount = async () => {
+      try {
+        const response = await fetch('/api/itemCount')
+        if (response.ok) {
+          const data = await response.json()
+          setPublicItemCount(data.itemCount)
+        }
+      } catch (error) {
+        console.error('Error fetching public item count:', error)
+      }
+    }
+    fetchPublicItemCount()
+  }, [])
+
+  useEffect(() => {
+    if (itemCount) {
+      loadItems()
+    }
   }, [itemCount])
+
+  useEffect(() => {
+    if (publicItemCount > 0) {
+      loadLeaderboard()
+    }
+  }, [publicItemCount])
 
   const loadItems = async () => {
     if (!itemCount) return
@@ -106,14 +130,14 @@ export default function Home() {
   }
 
   const loadLeaderboard = async () => {
-    if (!itemCount) return
+    if (!publicItemCount) return
 
     setLoadingLeaderboard(true)
     const finderStats = {}
 
     try {
       // Load all items and collect finder statistics
-      for (let i = 1; i <= Number(itemCount); i++) {
+      for (let i = 1; i <= Number(publicItemCount); i++) {
         try {
           const response = await fetch(`/api/item/${i}`)
           if (response.ok) {
